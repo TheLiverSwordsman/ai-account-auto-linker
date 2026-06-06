@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Local environment and secrets
+.env
+.env.local
+.env.*.local
+.env.test
+.env.development.local
+.env.test.local
+.env.production.local
+credentials.json
+kiro_credentials.json
+*.credentials.json
+.settings.json
+
+# Runtime artifacts
+.cache/
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+error_screenshot.png
+*.png
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage and test output
+coverage/
+*.lcov
+.nyc_output/
+
+# Build/cache directories
+.parcel-cache/
+.next/
+out/
+.nuxt/
+dist/
+.tmp/
+tmp/
+temp/
+
+# Package artifacts
+*.tgz
+
+# Browser data
+browser-data/
+chromium-data/

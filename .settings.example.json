@@ -1,0 +1,27 @@
+{
+  "inboxes": [
+    {
+      "email": "example.account@example.com",
+      "domain": "example.com",
+      "status": "available",
+      "allowed": true,
+      "tags": [],
+      "lastScanned": null,
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "email": "used.account@example.com",
+      "domain": "example.com",
+      "status": "available",
+      "allowed": true,
+      "tags": ["kiro"],
+      "lastScanned": "2026-01-01T00:00:00.000Z",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "utilities": {
+    "workers": 1,
+    "headless": false
+  },
+  "lastModified": "2026-01-01T00:00:00.000Z"
+}

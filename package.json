@@ -1,0 +1,43 @@
+{
+  "name": "account-auto-linker",
+  "version": "1.0.0",
+  "description": "Interactive TUI for Mailstack-backed account registration and 9router dashboard OAuth linking workflows.",
+  "main": "agent/main.js",
+  "scripts": {
+    "start": "node agent/main.js",
+    "dashboard": "node agent/main.js --dashboard-only",
+    "login": "node agent/main.js --login",
+    "register": "node agent/main.js --register",
+    "check": "find agent core services utils -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "smoke": "node test-e2e.js",
+    "test": "npm run check && npm run smoke"
+  },
+  "keywords": [
+    "account-linking",
+    "kiro",
+    "aws",
+    "mailstack",
+    "oauth",
+    "tui",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@faker-js/faker": "^10.4.0",
+    "axios": "^1.17.0",
+    "chalk": "^5.6.2",
+    "dotenv": "^17.4.2",
+    "prompts": "^2.4.2",
+    "puppeteer": "^25.1.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "random-useragent": "^0.5.0"
+  },
+  "bin": {
+    "account-auto-linker": "./agent/main.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

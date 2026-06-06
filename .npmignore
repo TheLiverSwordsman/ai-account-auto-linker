@@ -1,0 +1,9 @@
+.env
+.env.*
+.settings.json
+credentials.json
+.cache/
+node_modules/
+*.png
+*.log
+.DS_Store
