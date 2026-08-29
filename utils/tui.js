@@ -304,11 +304,6 @@ class TUI {
           if (activeTab === 'inboxes') {
             const inbox = state.inboxes[state.inboxCursor];
             if (!inbox) return;
-            if (inbox.tags && inbox.tags.length > 0) {
-              state.message = `Cannot block tagged inbox: ${inbox.tags.map(tag => `[${tag.toUpperCase()}]`).join(' ')}`;
-              render();
-              return;
-            }
             if (context.toggleInbox) context.toggleInbox(inbox.email);
             state.message = `${inbox.email} toggled`;
             render();
@@ -410,6 +405,34 @@ class TUI {
       onCancel: () => process.exit(130)
     });
     return response.value;
+  }
+
+  async registrationCount(maxAvailable, initial = 1) {
+    const max = Math.max(1, Number(maxAvailable) || 1);
+    const defaultCount = Math.min(Math.max(1, Number(initial) || 1), max);
+
+    if (max === 1) {
+      return 1;
+    }
+
+    const response = await prompts({
+      type: 'number',
+      name: 'count',
+      message: `How many accounts should be registered? (1-${max})`,
+      initial: defaultCount,
+      min: 1,
+      max,
+      validate: value => {
+        if (!Number.isInteger(value)) return 'Enter a whole number';
+        if (value < 1) return 'Enter at least 1';
+        if (value > max) return `Only ${max} inbox(es) are available`;
+        return true;
+      }
+    }, {
+      onCancel: () => process.exit(130)
+    });
+
+    return response.count;
   }
 
   async confirm(message, initial = true) {

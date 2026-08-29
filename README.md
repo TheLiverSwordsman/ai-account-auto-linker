@@ -6,6 +6,9 @@
   <b>Interactive TUI for Mailstack-backed AWS/Kiro registration and 9router dashboard OAuth login workflows.</b>
 </p>
 
+> [!CAUTION]
+> This project is provided for educational and research purposes only. The author and contributors are not affiliated with, endorsed by, or sponsored by AWS, Kiro, Mailstack, 9router, or any other referenced website or service. We do not recommend using this software against production or third-party systems. If you use it, you do so entirely at your own risk and are responsible for complying with all applicable laws, policies, and terms of service.
+
 <p align="center">
   <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?logo=node.js&logoColor=white" alt="Node.js >= 20">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
@@ -58,7 +61,7 @@ Account Auto Linker is a local Node.js automation tool that coordinates:
 First install and run [9router](https://github.com/decolua/9router/) so the dashboard API is available. Then clone this repository:
 
 ```bash
-git clone https://github.com/<your-org>/account-auto-linker.git
+  git clone https://github.com/TheLiverSwordsman/ai-account-auto-linker.git
 cd account-auto-linker
 npm install
 cp .env.example .env
@@ -228,7 +231,7 @@ Make sure `credentials.json` exists in the project root and contains an array:
 
 ### No available inboxes for registration
 
-Open `Settings → Inboxes`, press `R` to refresh from Mailstack, then allow clean inboxes. Tagged inboxes like `[KIRO]` remain read-only and allowed so the tool does not re-use them for fresh registration.
+Open `Settings → Inboxes`, press `R` to refresh from Mailstack, then allow clean inboxes. Tagged inboxes like `[KIRO]` remain read-only and allowed so the tool does not re-use them for fresh registration. Verification and MFA email detection use the REST refresh endpoint followed by polling; the retired inbox WebSocket is not used.
 
 ### Dashboard validation fails
 

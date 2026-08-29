@@ -3,10 +3,27 @@ const path = require('path');
 const tui = require('./tui');
 const logger = require('./logger');
 const MailstackClient = require('../services/MailstackClient');
+const { InboxDeadError } = MailstackClient;
 
 class Settings {
   constructor() {
     this.settingsPath = path.join(__dirname, '..', '.settings.json');
+  }
+
+  getInboxEmail(inbox) {
+    return inbox.email || inbox.address || inbox.mailbox || 'unknown';
+  }
+
+  hasTag(inbox, tag) {
+    return (inbox.tags || []).some(item => String(item).toLowerCase() === tag.toLowerCase());
+  }
+
+  isActiveInbox(inbox) {
+    return inbox.status === 'active' || inbox.status === 'polling' || inbox.status === 'available';
+  }
+
+  isRegistrationCandidate(inbox) {
+    return inbox.allowed !== false && this.isActiveInbox(inbox) && !this.hasTag(inbox, 'kiro') && !inbox.dead;
   }
 
   /**
@@ -117,19 +134,30 @@ class Settings {
 
     for (let i = 0; i < remoteInboxes.length; i++) {
       const remoteInbox = remoteInboxes[i];
-      const email = remoteInbox.email || remoteInbox.address || remoteInbox.mailbox || 'unknown';
+      const email = this.getInboxEmail(remoteInbox);
       const existing = existingInboxes.find(e => e.email === email);
 
-      if (existing && existing.tags && existing.tags.length > 0) {
-        // Cache hit
+      if (existing?.dead) {
+        // Skip dead inboxes — they're permanently removed from active pool
         cacheResults.push({
           index: i,
           email,
-          tags: existing.tags,
+          tags: [],
+          lastScanned: existing.deadAt,
+          fromCache: true,
+          dead: true
+        });
+        logger.debug('Settings', `Skipping dead inbox ${email}`);
+      } else if (existing && (existing.allowed === false || this.hasTag(existing, 'kiro') || (existing.tags && existing.tags.length > 0))) {
+        // Cache hit / intentionally skipped. Disabled or Kiro-tagged inboxes should not be checked.
+        cacheResults.push({
+          index: i,
+          email,
+          tags: existing.tags || [],
           lastScanned: existing.lastScanned,
           fromCache: true
         });
-        logger.debug('Settings', `Cache hit for ${email} — tags: [${existing.tags.join(', ')}]`);
+        logger.debug('Settings', `Skipping scan for ${email} — allowed: ${existing.allowed !== false}, tags: [${(existing.tags || []).join(', ')}]`);
       } else {
         // Cache miss - needs scanning
         toScan.push({
@@ -152,11 +180,11 @@ class Settings {
           // Show progress
           tui.showProgress(`Fetching account "${item.email}" (${completed}/${total})`);
 
-          // Scan with timeout (10 seconds per inbox)
+          // Scan with timeout. 429 backoff may wait longer than a normal request.
           const tags = await Promise.race([
             this.scanInboxForTags(mailstack, item.email),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Scan timeout')), 10000)
+              setTimeout(() => reject(new Error('Scan timeout')), 60000)
             )
           ]);
 
@@ -172,6 +200,14 @@ class Settings {
           };
         } catch (error) {
           completed++;
+
+          // Check if this is a 410 (inbox dead) error
+          if (error instanceof InboxDeadError) {
+            logger.warn('Settings', `💀 ${item.email}: account dead (410), marking as dead`);
+            this.markInboxDead(item.email);
+            return null; // Exclude from results
+          }
+
           logger.warn('Settings', `Could not scan inbox ${item.email}: ${error.message}`);
 
           // Fall back to cache if available
@@ -201,9 +237,9 @@ class Settings {
       const results = await Promise.allSettled(scanPromises);
       tui.clearProgress();
 
-      // Extract successful results
+      // Extract successful results (null = dead inbox, already marked)
       for (const result of results) {
-        if (result.status === 'fulfilled' && result.value) {
+        if (result.status === 'fulfilled' && result.value !== null) {
           scanResults.push(result.value);
         }
       }
@@ -213,11 +249,32 @@ class Settings {
     const allResults = [...cacheResults, ...scanResults];
     const mergedInboxes = [];
 
+    // Re-read settings in case markInboxDead wrote during scan
+    const freshSettings = this.load();
+    const freshInboxes = freshSettings.inboxes || [];
+
     for (let i = 0; i < remoteInboxes.length; i++) {
       const remoteInbox = remoteInboxes[i];
-      const email = remoteInbox.email || remoteInbox.address || remoteInbox.mailbox || 'unknown';
+      const email = this.getInboxEmail(remoteInbox);
       const existing = existingInboxes.find(e => e.email === email);
+      const fresh = freshInboxes.find(e => e.email === email);
       const result = allResults.find(r => r.index === i);
+
+      // Preserve dead status — either from freshly-marked or previously saved
+      if (fresh?.dead || existing?.dead) {
+        mergedInboxes.push({
+          email: email,
+          domain: remoteInbox.domain || email.split('@')[1] || 'unknown',
+          status: remoteInbox.status || 'unknown',
+          allowed: false,
+          tags: [],
+          lastScanned: fresh?.deadAt || existing?.deadAt || null,
+          createdAt: existing?.createdAt || new Date().toISOString(),
+          dead: true,
+          deadAt: fresh?.deadAt || existing?.deadAt || new Date().toISOString()
+        });
+        continue;
+      }
 
       const inboxData = {
         email: email,
@@ -228,11 +285,6 @@ class Settings {
         lastScanned: result ? result.lastScanned : null,
         createdAt: existing?.createdAt || new Date().toISOString()
       };
-
-      // If inbox has tags, force it to be allowed (can't toggle off)
-      if (inboxData.tags.length > 0) {
-        inboxData.allowed = true;
-      }
 
       mergedInboxes.push(inboxData);
     }
@@ -279,6 +331,9 @@ class Settings {
 
       return Array.from(tags);
     } catch (error) {
+      if (error instanceof InboxDeadError) {
+        throw error; // Re-throw 410 — inbox is dead, don't mark as skipped
+      }
       logger.warn('Settings', `Could not scan inbox ${email} for tags: ${error.message}`);
       return [];
     }
@@ -297,15 +352,11 @@ class Settings {
    */
   getAllowedInboxes() {
     const inboxes = this.getInboxes();
-    return inboxes.filter(i => i.allowed);
+    return inboxes.filter(i => i.allowed !== false);
   }
 
   getRegistrationCandidates() {
-    return this.getAllowedInboxes().filter(inbox => {
-      const active = inbox.status === 'active' || inbox.status === 'polling' || inbox.status === 'available';
-      const tags = inbox.tags || [];
-      return active && tags.length === 0;
-    });
+    return this.getInboxes().filter(inbox => this.isRegistrationCandidate(inbox));
   }
 
   /**
@@ -339,9 +390,20 @@ class Settings {
     const tags = new Set(inbox.tags || []);
     tags.add(tag);
     inbox.tags = Array.from(tags);
-    inbox.allowed = true;
     inbox.lastScanned = new Date().toISOString();
     this.save(inboxes);
+    return inbox;
+  }
+
+  markInboxDead(email) {
+    const inboxes = this.getInboxes();
+    const inbox = inboxes.find(i => i.email === email);
+    if (!inbox) return null;
+
+    inbox.dead = true;
+    inbox.deadAt = new Date().toISOString();
+    this.save(inboxes);
+    logger.info('Settings', `Marked inbox ${email} as dead (HTTP 410)`);
     return inbox;
   }
 
@@ -364,25 +426,18 @@ class Settings {
 
     const mailstack = new MailstackClient(process.env.MAILSTACK_API_KEY);
     const excludedEmails = new Set(options.excludeEmails || []);
-    const allowedInboxes = this.getAllowedInboxes().filter(inbox => !excludedEmails.has(inbox.email));
+    const allowedInboxes = this.getInboxes().filter(inbox =>
+      this.isRegistrationCandidate(inbox) && !excludedEmails.has(inbox.email)
+    );
 
     if (allowedInboxes.length === 0) {
       throw new Error('No allowed inboxes available. Check settings.');
     }
 
-    // Filter to active inboxes only
-    const activeInboxes = allowedInboxes.filter(i =>
-      i.status === 'active' || i.status === 'polling' || i.status === 'available'
-    );
+    logger.info('Settings', `Checking ${allowedInboxes.length} allowed clean candidate inbox(es) for cleanliness...`);
 
-    if (activeInboxes.length === 0) {
-      throw new Error('No active allowed inboxes available');
-    }
-
-    logger.info('Settings', `Checking ${activeInboxes.length} allowed inbox(es) for cleanliness...`);
-
-    // Use Mailstack's selectCleanInbox logic but only on allowed inboxes
-    for (const inbox of activeInboxes) {
+    // Check only allowed, active, non-Kiro-tagged inboxes.
+    for (const inbox of allowedInboxes) {
       try {
         const messages = await mailstack.getMessages(inbox.email, 50);
 
@@ -406,7 +461,12 @@ class Settings {
         logger.success('Settings', `${inbox.email} - clean inbox selected`);
         return inbox;
       } catch (error) {
-        logger.warn('Settings', `Could not check inbox ${inbox.email}: ${error.message}`);
+        if (error instanceof InboxDeadError) {
+          logger.error('Settings', `${inbox.email} - account dead (410), marking as dead`);
+          this.markInboxDead(inbox.email);
+        } else {
+          logger.warn('Settings', `Could not check inbox ${inbox.email}: ${error.message}`);
+        }
         continue;
       }
     }

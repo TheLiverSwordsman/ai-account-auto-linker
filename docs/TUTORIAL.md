@@ -46,7 +46,7 @@ Use:
 - `↑/↓` to select an inbox
 - `Space` to allow/block clean inboxes
 
-Tagged inboxes such as `[KIRO]` are read-only. They remain allowed in the UI, but they are not selected for fresh registration.
+Tagged inboxes such as `[KIRO]` and inboxes disabled in settings are skipped before any freshness checks. They are not selected for fresh registration.
 
 ## 4. Configure Utilities
 

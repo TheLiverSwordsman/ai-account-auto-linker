@@ -105,7 +105,7 @@ class SignupFlow {
       await this.input.randomPause(2500, 4000);
 
       // Verification code
-      console.log('   ⏳ Polling Mailstack for verification email...');
+      console.log('   📬 Polling Mailstack for the verification email...');
       const code = await this.mailstack.waitForVerificationCode(email, 'verif', 120000, 5000);
       console.log(`   ✓ Code received: ${code}`);
 
